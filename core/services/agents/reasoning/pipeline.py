@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 from core.services.agents.reasoning.prompts import (
     REASONING_SYSTEM_PROMPT,
+    REASONING_STEP_SYSTEM_PROMPT,
+    REASONING_STEP_USER_PROMPT_TEMPLATE,
     REASONING_USER_PROMPT_TEMPLATE,
 )
 
@@ -74,6 +76,8 @@ class ReasoningPipeline:
 
     system_prompt: str = REASONING_SYSTEM_PROMPT
     user_prompt_template: str = REASONING_USER_PROMPT_TEMPLATE
+    step_system_prompt: str = REASONING_STEP_SYSTEM_PROMPT
+    step_user_prompt_template: str = REASONING_STEP_USER_PROMPT_TEMPLATE
 
     def run(
         self,
@@ -114,6 +118,74 @@ class ReasoningPipeline:
             raw_text=text,
             raw_json=data,
         )
+
+    def stream_steps(
+        self,
+        task: str,
+        *,
+        provider: ReasoningProvider,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        system: Optional[str] = None,
+        start_step: str = "problem_definition",
+        max_steps: int = 12,
+    ):
+        """
+        Yield reasoning steps incrementally.
+
+        Each yielded item is a dict:
+          { "step": str, "content": str, "next_step": str, "assumptions": [str] }
+
+        The model is responsible for selecting next_step so it can "jump" as needed.
+        """
+        max_steps = max(1, int(max_steps))
+        current = (start_step or "problem_definition").strip() or "problem_definition"
+        sys_prompt = system or self.step_system_prompt
+
+        prev: list[dict[str, Any]] = []
+        assumptions: list[str] = []
+
+        for _ in range(max_steps):
+            prompt = self.step_user_prompt_template.format(
+                task=task.strip(),
+                current_step=current,
+                previous_steps_json=json.dumps(prev, ensure_ascii=False, separators=(",", ":"), default=str),
+            )
+
+            try:
+                text = provider.invoke_text(
+                    prompt,
+                    system=sys_prompt,
+                    model=model,
+                    reasoning=True,
+                    reasoning_effort=reasoning_effort,
+                )
+            except TypeError:
+                text = provider.invoke_text(prompt, system=sys_prompt, model=model)
+
+            text = (text or "").strip()
+            data = _safe_parse_json(text)
+
+            step = str(data.get("step") or current).strip() or current
+            content = str(data.get("content") or "").strip()
+            next_step = str(data.get("next_step") or "final_answer").strip() or "final_answer"
+
+            step_assumptions = _coerce_list_of_str(data.get("assumptions"))
+            if step_assumptions:
+                assumptions.extend(step_assumptions)
+
+            out = {
+                "step": step,
+                "content": content,
+                "next_step": next_step,
+                "assumptions": step_assumptions,
+            }
+            prev.append({"step": step, "content": content})
+            yield out
+
+            if next_step == "final_answer":
+                break
+            current = next_step
 
 
 # Import-friendly default instance
