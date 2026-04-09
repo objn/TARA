@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+pydantic>2
+langchain-core
+langchain-openai

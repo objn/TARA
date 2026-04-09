@@ -1,0 +1,72 @@
+services:
+  redis:
+    image: redis:8.2.5-bookworm
+    container_name: tara-redis
+    profiles: ["db"]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  postgres:
+    image: postgres:18.3-bookworm
+    container_name: tara-postgres
+    profiles: ["db"]
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: tara
+      POSTGRES_USER: tara
+      POSTGRES_PASSWORD: tara
+    volumes:
+      # Postgres 18+ expects a mount at /var/lib/postgresql (data lives in a versioned subdir)
+      - postgres-data:/var/lib/postgresql
+
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: tara-gitlab
+    restart: unless-stopped
+    hostname: gitlab.local
+    shm_size: "256m"
+    environment:
+      # NOTE: Update external_url if you access via a different hostname/IP.
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab.local'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+    ports:
+      - "8080:80"
+      - "8443:443"
+      - "2222:22"
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+
+  tara:
+    image: python:3.12-slim
+    container_name: tara
+    profiles: ["tara"]
+    working_dir: /core
+    restart: unless-stopped
+    environment:
+      # Convenience defaults for your Python app to read.
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://tara:tara@postgres:5432/tara
+      PIP_CACHE_DIR: /pip-cache
+    volumes:
+      # Mount the current project directory into the container
+      - ./:/core
+      # Give TARA its own named volume (cache/venv/etc.)
+      - tara-cache:/pip-cache
+    command: >
+      bash -lc "python --version && echo 'TARA container is up. Replace command in docker-compose.yml to run your app.' && tail -f /dev/null"
+
+volumes:
+  redis-data:
+  postgres-data:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  tara-cache:

@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional, Protocol, runtime_checkable
+
+from core.services.agents.reasoning.prompts import (
+    REASONING_SYSTEM_PROMPT,
+    REASONING_USER_PROMPT_TEMPLATE,
+)
+
+
+@runtime_checkable
+class ReasoningProvider(Protocol):
+    """
+    Minimal provider interface expected by the reasoning pipeline.
+
+    Any provider can be used as long as it implements `invoke_text()` with a compatible signature.
+    """
+
+    def invoke_text(
+        self,
+        prompt: str,
+        *,
+        system: Optional[str] = None,
+        model: Optional[str] = None,
+        reasoning: bool = False,
+        reasoning_effort: Optional[str] = None,
+    ) -> str: ...
+
+
+@dataclass
+class ReasoningResult:
+    problem_definition: str = ""
+    planning: str = ""
+    analysis_and_design: str = ""
+    implementation: str = ""
+    testing: str = ""
+    reporting: str = ""
+    final_answer: str = ""
+    assumptions: list[str] = field(default_factory=list)
+
+    raw_text: str = ""
+    raw_json: Dict[str, Any] = field(default_factory=dict)
+
+
+def _coerce_list_of_str(v: Any) -> list[str]:
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(x) for x in v if str(x).strip()]
+    s = str(v).strip()
+    return [s] if s else []
+
+
+def _safe_parse_json(text: str) -> Dict[str, Any]:
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return obj
+        return {"_value": obj}
+    except Exception:
+        return {}
+
+
+@dataclass
+class ReasoningPipeline:
+    """
+    Provider-agnostic reasoning pipeline.
+
+    It requests a structured JSON response so downstream code can parse it reliably.
+    Prompts are stored in `core/services/agents/reasoning/prompts.py` (English-only).
+    """
+
+    system_prompt: str = REASONING_SYSTEM_PROMPT
+    user_prompt_template: str = REASONING_USER_PROMPT_TEMPLATE
+
+    def run(
+        self,
+        task: str,
+        *,
+        provider: ReasoningProvider,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        system: Optional[str] = None,
+    ) -> ReasoningResult:
+        prompt = self.user_prompt_template.format(task=task.strip())
+        sys_prompt = system or self.system_prompt
+
+        # Providers may differ slightly; prefer reasoning=True when supported.
+        try:
+            text = provider.invoke_text(
+                prompt,
+                system=sys_prompt,
+                model=model,
+                reasoning=True,
+                reasoning_effort=reasoning_effort,
+            )
+        except TypeError:
+            text = provider.invoke_text(prompt, system=sys_prompt, model=model)
+
+        text = (text or "").strip()
+        data = _safe_parse_json(text)
+
+        return ReasoningResult(
+            problem_definition=str(data.get("problem_definition", "")).strip(),
+            planning=str(data.get("planning", "")).strip(),
+            analysis_and_design=str(data.get("analysis_and_design", "")).strip(),
+            implementation=str(data.get("implementation", "")).strip(),
+            testing=str(data.get("testing", "")).strip(),
+            reporting=str(data.get("reporting", "")).strip(),
+            final_answer=str(data.get("final_answer", "")).strip(),
+            assumptions=_coerce_list_of_str(data.get("assumptions")),
+            raw_text=text,
+            raw_json=data,
+        )
+
+
+# Import-friendly default instance
+pipeline = ReasoningPipeline()
