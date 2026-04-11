@@ -15,7 +15,7 @@ from rich.text import Text
 
 from core.configs.settings import Env
 from core.services.agents.main import Agent
-from core.services.agents.tools.calculator import calculator_tool
+from core.services.agents.tools.remote_tools import register_mcp_tools
 from core.services.provider.openai import provider
 
 JsonDict = Dict[str, Any]
@@ -41,6 +41,7 @@ Commands:
   /effort      Set reasoning_effort (or empty)
   /reasoning   Toggle showing reasoning
   /stream      Toggle streaming with tools (raw JSON stream)
+  /langchain-gen-graph  Write agent_flow.png (LangGraph run graph, Mermaid PNG)
 """
 
 
@@ -147,15 +148,13 @@ def _agent_run_streaming_with_tools(
             "analysis_and_design": reasoning.analysis_and_design,
         }
     )
-    tools_json = _json_dumps([t.to_json() for t in agent.tools.values()])
     final_answer = reasoning.final_answer.strip()
 
     for i in range(max(0, int(agent.max_tool_steps))):
-        prompt = agent.tool_user_prompt_template.format(
+        prompt = agent.format_tool_user_prompt(
             task=task.strip(),
             reasoning_summary=reasoning_summary,
-            tools_json=tools_json,
-            history_json=_json_dumps(history),
+            history=history,
         )
 
         console.print(f"[dim]step {i + 1}/{agent.max_tool_steps}[/dim]")
@@ -227,7 +226,13 @@ def _render_header(console: Console) -> None:
 
 def _build_agent() -> Agent:
     a = Agent(provider=provider)
-    a.register_tool(calculator_tool())
+    try:
+        register_mcp_tools(a)
+    except Exception as e:
+        # MCP may be down during local dev; continue without tools.
+        import sys
+
+        print(f"[warn] MCP tools unavailable: {e}", file=sys.stderr)
     a.max_tool_steps = 10
     return a
 
@@ -240,7 +245,7 @@ def _compose_task(user_text: str, state: ChatState) -> str:
     return f"{user_text}\n\n[chat_context]\n{context}"
 
 
-def _handle_command(cmd: str, *, console: Console, state: ChatState) -> bool:
+def _handle_command(cmd: str, *, console: Console, state: ChatState, agent: Agent) -> bool:
     c = cmd.strip()
 
     if c == "/help":
@@ -276,6 +281,14 @@ def _handle_command(cmd: str, *, console: Console, state: ChatState) -> bool:
         state.stream = not state.stream
         console.print(f"[green]stream = {state.stream!r}[/green]")
         return True
+    if c == "/langchain-gen-graph":
+        out = os.path.abspath("agent_flow.png")
+        try:
+            path = agent.export_agent_flow_png(output_path=out)
+            console.print(f"[green]Wrote LangGraph diagram:[/green] {path}")
+        except Exception as e:  # pragma: no cover
+            console.print(f"[red]Could not generate graph PNG:[/red] {e}")
+        return True
 
     return False
 
@@ -305,7 +318,7 @@ def run() -> int:
             continue
         if text.startswith("/"):
             try:
-                if _handle_command(text, console=console, state=state):
+                if _handle_command(text, console=console, state=state, agent=agent):
                     continue
             except SystemExit:
                 console.print("[dim]bye[/dim]")

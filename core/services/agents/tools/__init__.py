@@ -1,6 +1,3 @@
-from __future__ import annotations
+from core.services.agents.tools.remote_tools import register_mcp_tools, tools_from_mcp
 
-from core.services.agents.tools.calculator import calculator_tool
-
-__all__ = ["calculator_tool"]
-
+__all__ = ["register_mcp_tools", "tools_from_mcp"]

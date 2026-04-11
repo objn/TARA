@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from core.configs.settings import ENV, Env
 from core.services.agents.main import Agent, AgentRunResult
+from core.services.agents.tools.remote_tools import register_mcp_tools
 from core.services.provider.openai import provider as default_provider
 
 JsonDict = Dict[str, Any]
@@ -308,6 +309,53 @@ class ReasoningRedisStore:
             return {"raw": raw}
 
 
+class NoOpReasoningStore:
+    def put(self, *, topic_id: uuid.UUID, run_id: str, payload: JsonDict) -> None:
+        _ = (topic_id, run_id, payload)
+
+    def get(self, *, topic_id: uuid.UUID, run_id: str) -> Optional[JsonDict]:
+        _ = (topic_id, run_id)
+        return None
+
+
+class RunStateRedisStore:
+    """Ephemeral orchestration snapshot per run_id (TTL). Key: tara:run:{run_id}:state"""
+
+    def __init__(self, cfg: RedisConfig):
+        self.cfg = cfg
+        try:
+            import redis  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise ImportError("Missing Redis dependency. Install: `pip install redis`") from e
+
+        self._redis = redis
+        self._client = self._redis.Redis.from_url(self.cfg.url, decode_responses=True)
+
+    def _key(self, run_id: str) -> str:
+        return f"tara:run:{run_id}:state"
+
+    def put(self, *, run_id: str, payload: JsonDict) -> None:
+        k = self._key(run_id)
+        try:
+            self._client.set(k, _json_dumps(payload), ex=int(self.cfg.ttl_seconds))
+        except Exception as e:  # pragma: no cover
+            raise ReasoningStoreError(str(e)) from e
+
+    def delete(self, *, run_id: str) -> None:
+        try:
+            self._client.delete(self._key(run_id))
+        except Exception as e:  # pragma: no cover
+            raise ReasoningStoreError(str(e)) from e
+
+
+class NoOpRunStateStore:
+    def put(self, *, run_id: str, payload: JsonDict) -> None:
+        _ = (run_id, payload)
+
+    def delete(self, *, run_id: str) -> None:
+        _ = run_id
+
+
 def _format_context(messages: Sequence[ChatMessageDTO], *, max_chars: int = 8000) -> str:
     # Keep it deterministic, compact, and safe.
     lines: List[str] = []
@@ -371,6 +419,7 @@ class ChatService:
         *,
         pg: Optional[ChatPostgresStore] = None,
         reasoning: Optional[ReasoningRedisStore] = None,
+        run_state: Optional[RunStateRedisStore] = None,
         provider=default_provider,
     ):
         cfg = _require_env()
@@ -381,15 +430,37 @@ class ChatService:
             pg = ChatPostgresStore(PostgresConfig(url=cfg.DATABASE_URL))
         if reasoning is None:
             if not cfg.REDIS_URL:
-                raise ReasoningStoreError("REDIS_URL is not set.")
-            reasoning = ReasoningRedisStore(RedisConfig(url=cfg.REDIS_URL))
+                if cfg.DATASTORE_FAIL_MODE == "degraded":
+                    reasoning = NoOpReasoningStore()  # type: ignore[assignment]
+                else:
+                    raise ReasoningStoreError("REDIS_URL is not set.")
+            else:
+                reasoning = ReasoningRedisStore(
+                    RedisConfig(url=cfg.REDIS_URL, ttl_seconds=int(cfg.REDIS_REASONING_TTL_SECONDS))
+                )
+
+        if run_state is None:
+            if not cfg.REDIS_URL:
+                if cfg.DATASTORE_FAIL_MODE == "degraded":
+                    run_state = NoOpRunStateStore()  # type: ignore[assignment]
+                else:
+                    run_state = None
+            else:
+                state_ttl = int(cfg.REDIS_RUN_STATE_TTL_SECONDS or cfg.REDIS_REASONING_TTL_SECONDS)
+                run_state = RunStateRedisStore(RedisConfig(url=cfg.REDIS_URL, ttl_seconds=state_ttl))
 
         self.pg = pg
         self.reasoning = reasoning
+        self.run_state = run_state
         self.provider = provider
+        self._cfg = cfg
 
         # Default single agent registry (can be extended by caller)
         self._agents: Dict[str, Agent] = {"default": Agent(provider=self.provider)}
+        try:
+            register_mcp_tools(self._agents["default"])
+        except Exception:
+            pass
 
     def register_agent(self, name: str, agent: Agent) -> None:
         self._agents[name] = agent
@@ -438,6 +509,20 @@ class ChatService:
         run_id = uuid.uuid4().hex
         started_at = time.time()
 
+        if self.run_state is not None:
+            try:
+                self.run_state.put(
+                    run_id=run_id,
+                    payload={
+                        "status": "running",
+                        "topic_id": str(req.topic_id),
+                        "mode": str(req.mode),
+                    },
+                )
+            except ReasoningStoreError:
+                if self._cfg.DATASTORE_FAIL_MODE == "strict":
+                    raise
+
         if req.mode == ChatMode.agent:
             agent = self._agents.get("default") or Agent(provider=self.provider)
             task = req.prompt.strip()
@@ -468,7 +553,11 @@ class ChatService:
                 ],
                 "raw_messages": res.raw_messages,
             }
-            self.reasoning.put(topic_id=req.topic_id, run_id=run_id, payload=reasoning_payload)
+            try:
+                self.reasoning.put(topic_id=req.topic_id, run_id=run_id, payload=reasoning_payload)
+            except ReasoningStoreError:
+                if self._cfg.DATASTORE_FAIL_MODE == "strict":
+                    raise
 
         elif req.mode == ChatMode.multiagent:
             cfg = req.multiagent or MultiAgentConfigDTO(agents=["default"])
@@ -508,10 +597,21 @@ class ChatService:
                     for name, r in results.items()
                 },
             }
-            self.reasoning.put(topic_id=req.topic_id, run_id=run_id, payload=reasoning_payload)
+            try:
+                self.reasoning.put(topic_id=req.topic_id, run_id=run_id, payload=reasoning_payload)
+            except ReasoningStoreError:
+                if self._cfg.DATASTORE_FAIL_MODE == "strict":
+                    raise
 
         else:  # pragma: no cover
             raise ValueError(f"Unsupported mode: {req.mode}")
+
+        if self.run_state is not None:
+            try:
+                self.run_state.delete(run_id=run_id)
+            except ReasoningStoreError:
+                if self._cfg.DATASTORE_FAIL_MODE == "strict":
+                    raise
 
         # 4) Save assistant message.
         assistant_msg = self.pg.insert_message(

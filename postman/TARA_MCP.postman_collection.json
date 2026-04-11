@@ -1,0 +1,78 @@
+{
+  "info": {
+    "name": "TARA MCP",
+    "description": "TARA core + MCP tool server (REST and SSE). Set tara_base and mcp_base variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "tara_base", "value": "http://127.0.0.1:8000" },
+    { "key": "mcp_base", "value": "http://127.0.0.1:9000" },
+    { "key": "tool_name", "value": "calculator" }
+  ],
+  "item": [
+    {
+      "name": "TARA health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{tara_base}}/health"
+      }
+    },
+    {
+      "name": "TARA root",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{tara_base}}/"
+      }
+    },
+    {
+      "name": "TARA agent stream (SSE)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"prompt\": \"Say hello.\",\n  \"model\": null,\n  \"reasoning_effort\": null,\n  \"max_tool_steps\": 5\n}"
+        },
+        "url": "{{tara_base}}/agent/stream"
+      }
+    },
+    {
+      "name": "MCP health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{mcp_base}}/health"
+      }
+    },
+    {
+      "name": "MCP list tools",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{mcp_base}}/tools"
+      }
+    },
+    {
+      "name": "MCP reload tools",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{mcp_base}}/tools/reload"
+      }
+    },
+    {
+      "name": "MCP tool stream (SSE)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"args\": { \"expression\": \"1+2\" },\n  \"delay_ms\": 0\n}"
+        },
+        "url": "{{mcp_base}}/tools/{{tool_name}}/stream"
+      }
+    }
+  ]
+}

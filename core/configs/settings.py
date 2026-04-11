@@ -37,6 +37,21 @@ class Env(BaseSettings):
     # Storage
     DATABASE_URL: Optional[str] = Field(default=None)
     REDIS_URL: Optional[str] = Field(default=None)
+    REDIS_REASONING_TTL_SECONDS: int = Field(default=30 * 60, ge=60, le=86400 * 7)
+    REDIS_RUN_STATE_TTL_SECONDS: Optional[int] = Field(default=None, ge=60, le=86400 * 7)
+    DATASTORE_FAIL_MODE: Literal["strict", "degraded"] = Field(default="degraded")
+
+    # MCP (core calls MCP over HTTP/SSE)
+    MCP_HOST: str = Field(default="127.0.0.1")
+    MCP_PORT: int = Field(default=9000, ge=1, le=65535)
+    MCP_BASE_URL: Optional[str] = Field(default=None)
+    MCP_DEFAULT_TOOL_DELAY_MS: Optional[int] = Field(default=None, ge=0, le=3_600_000)
+
+    @property
+    def mcp_base_url(self) -> str:
+        if self.MCP_BASE_URL and str(self.MCP_BASE_URL).strip():
+            return str(self.MCP_BASE_URL).rstrip("/")
+        return f"http://{self.MCP_HOST}:{self.MCP_PORT}"
 
     @classmethod
     def load(cls) -> "Env":
@@ -45,5 +60,6 @@ class Env(BaseSettings):
         return ENV
 
 
-# Optional cache to avoid re-parsing `.env` on every call.
 ENV: Optional[Env] = None
+
+__all__ = ["ENV", "Env", "TARASettings"]

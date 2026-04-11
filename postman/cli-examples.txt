@@ -1,0 +1,14 @@
+# Manual CLI examples (bash). On Windows PowerShell use curl.exe if needed.
+# Adjust ports to match .env / docker-compose.
+
+curl -sS http://127.0.0.1:8000/health
+curl -sS http://127.0.0.1:9000/health
+curl -sS http://127.0.0.1:9000/tools
+
+curl -sS -N -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Say hello.\",\"max_tool_steps\":5}" \
+  http://127.0.0.1:8000/agent/stream
+
+curl -sS -N -H "Content-Type: application/json" \
+  -d "{\"args\":{\"expression\":\"1+2\"},\"delay_ms\":0}" \
+  http://127.0.0.1:9000/tools/calculator/stream

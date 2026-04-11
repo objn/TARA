@@ -187,6 +187,56 @@ class ReasoningPipeline:
                 break
             current = next_step
 
+    def stream_one_step(
+        self,
+        task: str,
+        *,
+        provider: ReasoningProvider,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        system: Optional[str] = None,
+        current_step: str,
+        previous_steps: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Run exactly one reasoning-step LLM call (same contract as one yield of stream_steps).
+        Caller is responsible for appending to previous_steps and advancing current_step.
+        """
+        current = (current_step or "problem_definition").strip() or "problem_definition"
+        sys_prompt = system or self.step_system_prompt
+        prompt = self.step_user_prompt_template.format(
+            task=task.strip(),
+            current_step=current,
+            previous_steps_json=json.dumps(previous_steps, ensure_ascii=False, separators=(",", ":"), default=str),
+        )
+
+        try:
+            text = provider.invoke_text(
+                prompt,
+                system=sys_prompt,
+                model=model,
+                reasoning=True,
+                reasoning_effort=reasoning_effort,
+            )
+        except TypeError:
+            text = provider.invoke_text(prompt, system=sys_prompt, model=model)
+
+        text = (text or "").strip()
+        data = _safe_parse_json(text)
+
+        step = str(data.get("step") or current).strip() or current
+        content = str(data.get("content") or "").strip()
+        next_step = str(data.get("next_step") or "final_answer").strip() or "final_answer"
+        step_assumptions = _coerce_list_of_str(data.get("assumptions"))
+
+        return {
+            "step": step,
+            "content": content,
+            "next_step": next_step,
+            "assumptions": step_assumptions,
+            "raw_text": text,
+        }
+
 
 # Import-friendly default instance
 pipeline = ReasoningPipeline()

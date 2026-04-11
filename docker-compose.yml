@@ -21,7 +21,6 @@ services:
       POSTGRES_USER: tara
       POSTGRES_PASSWORD: tara
     volumes:
-      # Postgres 18+ expects a mount at /var/lib/postgresql (data lives in a versioned subdir)
       - postgres-data:/var/lib/postgresql
 
   gitlab:
@@ -31,7 +30,6 @@ services:
     hostname: gitlab.local
     shm_size: "256m"
     environment:
-      # NOTE: Update external_url if you access via a different hostname/IP.
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://gitlab.local'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
@@ -44,24 +42,46 @@ services:
       - gitlab-logs:/var/log/gitlab
       - gitlab-data:/var/opt/gitlab
 
+  mcp:
+    image: python:3.12-slim
+    container_name: tara-mcp
+    profiles: ["tara"]
+    working_dir: /core
+    restart: unless-stopped
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "9000"
+      PIP_CACHE_DIR: /pip-cache
+    volumes:
+      - ./:/core
+      - tara-cache:/pip-cache
+    ports:
+      - "9000:9000"
+    command: >
+      bash -lc "pip install -q -r requirements.txt && uvicorn mcp.main:app --host 0.0.0.0 --port 9000"
+
   tara:
     image: python:3.12-slim
     container_name: tara
     profiles: ["tara"]
     working_dir: /core
     restart: unless-stopped
+    depends_on:
+      - mcp
     environment:
-      # Convenience defaults for your Python app to read.
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql://tara:tara@postgres:5432/tara
+      MCP_BASE_URL: http://mcp:9000
+      HOST: "0.0.0.0"
+      PORT: "8000"
       PIP_CACHE_DIR: /pip-cache
     volumes:
-      # Mount the current project directory into the container
       - ./:/core
-      # Give TARA its own named volume (cache/venv/etc.)
       - tara-cache:/pip-cache
+    ports:
+      - "8000:8000"
     command: >
-      bash -lc "python --version && echo 'TARA container is up. Replace command in docker-compose.yml to run your app.' && tail -f /dev/null"
+      bash -lc "pip install -q -r requirements.txt && uvicorn core.main:app --host 0.0.0.0 --port 8000"
 
 volumes:
   redis-data:

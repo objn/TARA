@@ -7,16 +7,21 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from core.configs.settings import Env
 from core.services.chat.main import ChatService, CreateTopicRequestDTO, RunChatRequestDTO, SendMessageRequestDTO
 from core.services.agents.main import Agent
-from core.services.agents.tools.calculator import calculator_tool
+from core.services.agents.tools.remote_tools import register_mcp_tools
 from core.services.provider.openai import provider
 
 router = APIRouter(tags=["chat"])
 
+Env.load()
 chat_service = ChatService()
 agent = Agent(provider=provider)
-agent.register_tool(calculator_tool())
+try:
+    register_mcp_tools(agent)
+except Exception:
+    pass
 agent.max_tool_steps = 10
 
 
