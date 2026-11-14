@@ -1,1 +1,37 @@
-stack
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Python backend
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# JavaScript / Angular frontend
+node_modules/
+dist/
+.angular/
+.npm/
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
