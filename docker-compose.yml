@@ -1,0 +1,46 @@
+services:
+  frontend:
+    build:
+      context: ./stack/tara-frontend
+      dockerfile: Dockerfile
+    container_name: tara-frontend
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+
+  postgresql:
+    image: postgres:18-trixie
+    container_name: tara-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tara
+      POSTGRES_USER: tara
+      POSTGRES_PASSWORD: taraconnect
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tara -d tara"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tara-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
