@@ -6,6 +6,7 @@
   signal,
   viewChild,
 } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { beforeRender, NgtArgs } from 'angular-three';
 import { NgtCanvas } from 'angular-three/dom';
 import type { Mesh } from 'three';
@@ -45,7 +46,7 @@ class SceneGraphComponent {
 
 @Component({
   selector: 'app-root',
-  imports: [NgtCanvas, SceneGraphComponent],
+  imports: [NgtCanvas, SceneGraphComponent, DecimalPipe],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -61,11 +62,12 @@ class SceneGraphComponent {
     <div class="app-layout" [class.sidebar-collapsed]="sidebarCollapsed()">
       <header class="top-bar">
         <a class="brand" href="#home" aria-label="Tara home"><span class="brand-mark">T</span><span>TARA</span></a>
-        <nav class="top-links" aria-label="Main navigation"><a class="top-link active" href="#home">Overview</a><a class="top-link" href="#experience">Experience</a></nav>
+        <nav class="top-links" aria-label="Main navigation"><button class="top-link" [class.active]="topSection() === 'overview'" type="button" (click)="setTopSection('overview')">Overview</button><button class="top-link" [class.active]="topSection() === 'agentic-system'" type="button" (click)="setTopSection('agentic-system')">Agentic</button><button class="top-link" [class.active]="topSection() === 'knowledge'" type="button" (click)="setTopSection('knowledge')">Knowledge</button></nav>
         <button class="top-action" type="button" (click)="signOut()">Sign out <span aria-hidden="true">↗</span></button>
       </header>
       <aside class="side-bar" aria-label="Workspace navigation">
         <button class="sidebar-toggle" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="!sidebarCollapsed()" [attr.aria-label]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"><span aria-hidden="true">{{ sidebarCollapsed() ? '›' : '‹' }}</span></button>
+        @if (topSection() === 'overview') {
         <div class="side-menu-group">
           <p class="side-heading">OVERVIEW</p>
           <nav class="side-nav">
@@ -74,11 +76,81 @@ class SceneGraphComponent {
             <button class="side-link" [class.selected]="section() === 'service-health'" type="button" (click)="setSection('service-health')"><span class="nav-icon">◉</span><span>Service Health</span></button>
           </nav>
         </div>
+        } @else if (topSection() === 'agentic-system') {
+        <div class="side-menu-group">
+          <p class="side-heading">AGENTIC</p>
+          <nav class="side-nav">
+            <button class="side-link" [class.selected]="agenticPage() === 'agent'" type="button" (click)="setAgenticPage('agent')"><span class="nav-icon">✳</span><span>Agent</span></button>
+            <button class="side-link" [class.selected]="agenticPage() === 'multi-agent'" type="button" (click)="setAgenticPage('multi-agent')"><span class="nav-icon">◈</span><span>Multi-Agent</span></button>
+          </nav>
+        </div>
+        } @else {
+        <div class="side-menu-group">
+          <p class="side-heading">KNOWLEDGE</p>
+          <nav class="side-nav">
+            <button class="side-link" [class.selected]="knowledgePage() === 'documents'" type="button" (click)="setKnowledgePage('documents')"><span class="nav-icon">▤</span><span>Documents</span></button>
+            <button class="side-link" [class.selected]="knowledgePage() === 'sources'" type="button" (click)="setKnowledgePage('sources')"><span class="nav-icon">◫</span><span>Sources</span></button>
+            <button class="side-link" [class.selected]="knowledgePage() === 'search'" type="button" (click)="setKnowledgePage('search')"><span class="nav-icon">⌕</span><span>Search</span></button>
+            <button class="side-link" [class.selected]="knowledgePage() === 'index-status'" type="button" (click)="setKnowledgePage('index-status')"><span class="nav-icon">◷</span><span>Index Status</span></button>
+          </nav>
+        </div>
+        }
         <div class="side-bottom"><span class="avatar">T</span><span class="profile-copy"><strong>Tara Space</strong><small>Personal workspace</small></span><span class="profile-more">···</span></div>
       </aside>
-    @if (section() === 'service-health') {
+    @if (topSection() === 'knowledge') {
+      <main class="dashboard knowledge-page">
+        @if (knowledgePage() === 'documents') {
+          <header class="dashboard-heading"><div><p class="eyebrow">KNOWLEDGE / DOCUMENTS</p><h1>Documents</h1><p class="dashboard-subtitle">Upload and organize the files that power your knowledge base.</p></div></header>
+          <label class="upload-zone"><input type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" multiple (change)="uploadDocuments($event)" /><span class="upload-icon">↑</span><strong>Drop files here or <em>browse files</em></strong><small>PDF, DOCX, TXT, or MD · up to 50 MB per file</small></label>
+          @if (uploadMessage()) { <p class="agent-created-note" role="status">{{ uploadMessage() }}</p> }
+          <section class="knowledge-list"><div class="knowledge-list-heading"><h2>All documents <span>{{ documents().length }}</span></h2><span class="result-count">Supported formats · PDF, DOCX, TXT, MD</span></div>
+            @for (doc of documents(); track doc.name) {<article class="panel document-row"><span class="document-icon" [class.pdf-icon]="doc.type === 'PDF'">{{ doc.type }}</span><div class="document-copy"><strong>{{ doc.name }}</strong><small>{{ doc.size }} · {{ doc.source }} · {{ doc.added }}</small></div><span class="state-chip" [class.running]="doc.status === 'Indexed'" [class.waiting]="doc.status === 'Processing'">{{ doc.status }}</span></article>}
+            @empty {<section class="panel knowledge-empty"><span class="empty-orbit">▤</span><h2>No documents yet</h2><p>Upload a file to start building your knowledge base.</p></section>}
+          </section>
+        } @else if (knowledgePage() === 'sources') {
+          <header class="dashboard-heading"><div><p class="eyebrow">KNOWLEDGE / SOURCES</p><h1>Sources</h1><p class="dashboard-subtitle">Group related documents into sources for easier discovery and search.</p></div><button class="welcome-cta" type="button" (click)="sourceFormOpen.set(!sourceFormOpen())">＋ Create source</button></header>
+          @if (sourceFormOpen()) {<section class="panel source-form"><label class="form-field"><span>Source name</span><input type="text" placeholder="e.g. Product handbook" [value]="sourceName()" (input)="setSourceName($event)" /></label><label class="form-field"><span>Description</span><input type="text" placeholder="What documents belong here?" [value]="sourceDescription()" (input)="setSourceDescription($event)" /></label><div class="source-document-picker"><span class="form-field-label">Add documents</span>@for (doc of documents(); track doc.name) {<label><input type="checkbox" [checked]="selectedSourceDocs().includes(doc.name)" (change)="toggleSourceDoc(doc.name)" /> {{ doc.name }}</label>} @empty {<p class="no-agents">Upload documents first to add them to a source.</p>}</div><div class="network-form-footer"><button class="welcome-cta" type="button" (click)="createSource()">Create source <span aria-hidden="true">→</span></button></div></section>}
+          <section class="knowledge-list"><div class="knowledge-list-heading"><h2>Document groups <span>{{ sources().length }}</span></h2></div>@for (source of sources(); track source.name) {<article class="panel source-card"><div class="source-card-top"><span class="source-icon">◫</span><span class="state-chip running">Active</span></div><h2>{{ source.name }}</h2><p>{{ source.description }}</p><footer><span>{{ source.documents.length }} documents</span><span>{{ source.documents.join(' · ') || 'No documents added' }}</span></footer></article>} @empty {<section class="panel knowledge-empty"><span class="empty-orbit">◫</span><h2>No sources yet</h2><p>Create a source to group documents by topic or team.</p></section>}</section>
+        } @else if (knowledgePage() === 'search') {
+          <header class="dashboard-heading"><div><p class="eyebrow">KNOWLEDGE / SEARCH</p><h1>Search</h1><p class="dashboard-subtitle">Try a question and see which documents could answer it.</p></div></header>
+          <section class="knowledge-search-panel"><label class="knowledge-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Ask a question or search your documents..." [value]="knowledgeQuery()" (input)="setKnowledgeQuery($event)" (keydown.enter)="searchKnowledge()" /><button type="button" (click)="searchKnowledge()">Search <span aria-hidden="true">→</span></button></label><div class="search-hints"><span>Try asking</span><button type="button" (click)="useSearchExample('What is the onboarding process?')">“What is the onboarding process?”</button><button type="button" (click)="useSearchExample('Summarize the latest product strategy')">“Summarize the latest product strategy”</button></div></section>
+          @if (searchPerformed()) {<section class="knowledge-list search-results"><div class="knowledge-list-heading"><h2>Results <span>{{ searchResults().length }}</span></h2><small>Demo results · relevance-ranked</small></div>@for (result of searchResults(); track result.name) {<article class="panel search-result"><div class="search-result-top"><span class="document-icon">{{ result.type }}</span><span class="match-score">{{ result.score }}% match</span></div><h2>{{ result.name }}</h2><p>{{ result.excerpt }}</p><footer><span>{{ result.source }}</span><span>Page {{ result.page }}</span></footer></article>} @empty {<section class="panel knowledge-empty"><h2>No matching documents</h2><p>Try a broader question or upload more documents.</p></section>}</section>}
+        } @else {
+          <header class="dashboard-heading"><div><p class="eyebrow">KNOWLEDGE / INDEX STATUS</p><h1>Index Status</h1><p class="dashboard-subtitle">Track document processing and chunk indexing across your knowledge base.</p></div><div class="live-status"><span class="status-dot"></span> Index monitor <span class="updated-at">Updated just now</span></div></header>
+          <section class="metric-grid index-metrics"><article class="panel metric-card"><div class="metric-top"><span>Documents</span><span class="metric-icon violet">▤</span></div><strong>{{ documents().length }}</strong><div class="metric-foot"><span>in your knowledge base</span></div></article><article class="panel metric-card"><div class="metric-top"><span>Chunks indexed</span><span class="metric-icon green">▦</span></div><strong>{{ indexedChunks() }}</strong><div class="metric-foot"><span>of {{ totalChunks() }} total chunks</span></div></article><article class="panel metric-card"><div class="metric-top"><span>Processing</span><span class="metric-icon orange">◷</span></div><strong>{{ processingDocuments() }}</strong><div class="metric-foot"><span>documents in queue</span></div></article><article class="panel metric-card"><div class="metric-top"><span>Index health</span><span class="metric-icon green">◉</span></div><strong>{{ documents().length ? 'Healthy' : 'Ready' }}</strong><div class="metric-foot"><span>last updated just now</span></div></article></section>
+          <section class="knowledge-list"><div class="knowledge-list-heading"><h2>Processing queue <span>{{ documents().length }}</span></h2><span class="result-count">Document and chunk progress</span></div>@for (doc of documents(); track doc.name) {<article class="panel index-row"><span class="document-icon" [class.pdf-icon]="doc.type === 'PDF'">{{ doc.type }}</span><div class="index-document"><div><strong>{{ doc.name }}</strong><span class="state-chip" [class.running]="doc.status === 'Indexed'" [class.waiting]="doc.status === 'Processing'">{{ doc.status }}</span></div><small>{{ doc.indexedChunks }} of {{ doc.totalChunks }} chunks indexed · {{ doc.status === 'Indexed' ? 'Completed' : 'Extracting text' }}</small><div class="index-progress"><i [style.width.%]="doc.totalChunks ? doc.indexedChunks / doc.totalChunks * 100 : 0"></i></div></div><strong class="index-percent">{{ doc.totalChunks ? (doc.indexedChunks / doc.totalChunks * 100 | number:'1.0-0') : 0 }}%</strong></article>} @empty {<section class="panel knowledge-empty"><span class="empty-orbit">◷</span><h2>Nothing is being indexed</h2><p>Uploaded documents will appear here as they are processed.</p></section>}</section>
+        }
+      </main>
+    } @else if (topSection() === 'agentic-system') {
+      @if (agenticPage() === 'agent') {
+      <main class="dashboard agentic-page">
+        <header class="dashboard-heading"><div><p class="eyebrow">AGENTIC / AGENT</p><h1>Agent</h1><p class="dashboard-subtitle">Create and manage agents for your tasks, workflows, and everyday work.</p></div></header>
+        <section class="metric-grid agent-type-grid" aria-label="Agent types">
+          <article class="panel agent-type-card"><span class="metric-icon violet">⌘</span><h2>Agent</h2><p>Build an agent for tasks, workflows, research, and everyday work.</p><button class="side-link selected" type="button" (click)="agentCreated.set(true)">＋ Create agent <span aria-hidden="true"></span></button></article>
+        </section>
+        @if (agentCreated()) { <p class="agent-created-note" role="status">Agent setup is ready to begin. Choose a type above to continue.</p> }
+        <section class="panel agentic-empty"><span class="empty-orbit">✳</span><h2>Your agents will appear here</h2><p>Create an agent to get started.</p></section>
+      </main>
+      } @else {
+      <main class="dashboard agentic-page">
+        <header class="dashboard-heading"><div><p class="eyebrow">AGENTIC / MULTI-AGENT</p><h1>Multi-Agent</h1><p class="dashboard-subtitle">Bring agents together in a network and configure how they make decisions.</p></div></header>
+        <section class="service-toolbar network-toolbar" aria-label="Network controls"><label class="service-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search networks by name..." [value]="networkSearch()" (input)="setNetworkSearch($event)" aria-label="Search networks by name" /></label><button class="welcome-cta" type="button" (click)="networkFormOpen.set(!networkFormOpen())">＋ Create Network</button></section>
+        @if (networkFormOpen()) {
+        <section class="panel network-form"><label class="form-field"><span>Network name</span><input type="text" placeholder="e.g. Product Research Team" [value]="networkName()" (input)="setNetworkName($event)" /></label>
+          <section class="network-step"><div><span class="setup-step">01</span><h2>Select agents</h2><p>Search by agent name and filter by type.</p></div><div class="agent-select-tools"><label class="service-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search agents..." [value]="agentSearch()" (input)="setAgentSearch($event)" aria-label="Search agents by name" /></label><label class="filter-control"><span>Type</span><select [value]="agentTypeFilter()" (change)="setAgentTypeFilter($event)"><option value="All">All types</option><option value="Research">Research</option><option value="Development">Development</option><option value="Analytics">Analytics</option><option value="Writing">Writing</option></select></label><div class="agent-picker">@for (agent of filteredAgents(); track agent.name) {<label><input type="checkbox" [checked]="selectedAgents().includes(agent.name)" (change)="toggleAgent(agent.name)" /> {{ agent.name }} <small>{{ agent.type }}</small></label>} @empty {<p class="no-agents">No agents match your search.</p>}</div></div></section>
+          <section class="network-step"><div><span class="setup-step">02</span><h2>Decision system</h2><p>Choose how the network reaches a decision.</p></div><div class="decision-options"><label><input type="radio" name="decision" value="Coordinator" [checked]="decisionSystem() === 'Coordinator'" (change)="setDecisionSystem('Coordinator')" /> Coordinator <small>A lead agent coordinates the discussion and gives the final answer.</small></label><label><input type="radio" name="decision" value="Consensus" [checked]="decisionSystem() === 'Consensus'" (change)="setDecisionSystem('Consensus')" /> Consensus <small>Agents discuss until enough members agree.</small></label><label><input type="radio" name="decision" value="Majority vote" [checked]="decisionSystem() === 'Majority vote'" (change)="setDecisionSystem('Majority vote')" /> Majority vote <small>Each agent casts a weighted vote; the highest score wins.</small></label></div></section>
+          @if (decisionSystem() === 'Coordinator') {<section class="network-step decision-detail"><div><span class="setup-step">03</span><h2>Choose coordinator</h2><p>Select the lead agent for this network.</p></div><label class="form-field"><span>Coordinator agent</span><select [value]="coordinator()" (change)="setCoordinator($event)"><option value="">Select a selected agent</option>@for (agent of selectedAgents(); track agent) {<option [value]="agent">{{ agent }}</option>}</select></label></section>}
+          @if (decisionSystem() === 'Consensus') {<section class="network-step decision-detail"><div><span class="setup-step">03</span><h2>Set agreement threshold</h2><p>How many agents must agree before the network accepts an answer?</p></div><label class="form-field"><span>Required agreement</span><select [value]="consensusThreshold()" (change)="setConsensusThreshold($event)"><option value="All agents">All selected agents</option><option value="Two-thirds">At least two-thirds</option><option value="Majority">More than half</option></select></label></section>}
+          @if (decisionSystem() === 'Majority vote') {<section class="network-step decision-detail"><div><span class="setup-step">03</span><h2>Set vote weights</h2><p>Choose how many points each selected agent can cast.</p></div><div class="vote-weight-list">@for (agent of selectedAgents(); track agent) {<label><span>{{ agent }}</span><input type="number" min="1" max="10" [value]="voteWeights()[agent] ?? 1" (input)="setVoteWeight(agent, $event)" /><small>points</small></label>} @empty {<p class="no-agents">Select agents above to set their vote weights.</p>}</div></section>}
+          <div class="network-form-footer"><button class="welcome-cta" type="button" (click)="createNetwork()">Create Network <span aria-hidden="true">→</span></button></div>
+        </section>}
+        <section class="network-list"><h2>Networks <span>{{ filteredNetworks().length }}</span></h2>@for (network of filteredNetworks(); track network.name) {<article class="panel network-row"><span class="empty-orbit">◈</span><div><strong>{{ network.name }}</strong><small>{{ network.agents }} agents · {{ network.decision }}</small></div><span class="state-chip running">Ready</span></article>} @empty {<section class="panel agentic-empty"><span class="empty-orbit">◈</span><h2>No networks yet</h2><p>Create a network to bring multiple agents together.</p></section>}</section>
+        @if (networkMessage()) { <p class="agent-created-note" role="status">{{ networkMessage() }}</p> }
+      </main>
+      }
+    } @else if (section() === 'service-health') {
     <main class="dashboard service-page" id="service-health">
-      <header class="dashboard-heading"><div><p class="eyebrow">AGENTIC SYSTEM / MONITORING</p><h1>Service Health</h1><p class="dashboard-subtitle">Monitor readiness and availability across your services.</p></div><div class="live-status"><span class="status-dot"></span> Live monitoring <span class="updated-at">Updated just now</span></div></header>
+      <header class="dashboard-heading"><div><p class="eyebrow">OVERVIEW / SERVICE HEALTH</p><h1>Service Health</h1><p class="dashboard-subtitle">Monitor readiness and availability across your services.</p></div><div class="live-status"><span class="status-dot"></span> Live monitoring <span class="updated-at">Updated just now</span></div></header>
       <section class="service-toolbar" aria-label="Service controls"><label class="service-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search services..." [value]="serviceSearch()" (input)="setServiceSearch($event)" aria-label="Search services by any field" /></label><label class="filter-control"><span>Filter</span><select [value]="serviceStatusFilter()" (change)="setServiceStatusFilter($event)" aria-label="Filter services by status"><option value="All">All statuses</option><option value="Healthy">Healthy</option><option value="Degraded">Degraded</option><option value="Down">Down</option></select></label><span class="result-count">{{ filteredServices().length }} services</span></section>
       <section class="panel service-table-panel"><div class="service-table-scroll"><table class="service-table"><thead><tr><th>No.</th><th>Name</th><th>Address</th><th>Ready%</th><th>Status</th></tr></thead><tbody>
         @for (service of filteredServices(); track service.no) {
@@ -90,7 +162,7 @@ class SceneGraphComponent {
     </main>
     } @else if (section() === 'activity') {
     <main class="dashboard activity-page" id="activity">
-      <header class="dashboard-heading"><div><p class="eyebrow">AGENTIC SYSTEM / MONITORING</p><h1>TARA Activity</h1><p class="dashboard-subtitle">Review what your agents are doing and the actions they have taken.</p></div><div class="live-status"><span class="status-dot"></span> Activity stream <span class="updated-at">Live</span></div></header>
+      <header class="dashboard-heading"><div><p class="eyebrow">OVERVIEW / ACTIVITY</p><h1>TARA Activity</h1><p class="dashboard-subtitle">Review what your agents are doing and the actions they have taken.</p></div><div class="live-status"><span class="status-dot"></span> Activity stream <span class="updated-at">Live</span></div></header>
       <div class="activity-tabs" role="tablist" aria-label="Activity views"><button type="button" role="tab" [attr.aria-selected]="activityTab() === 'agents'" [class.active]="activityTab() === 'agents'" (click)="setActivityTab('agents')">Agents <span>4</span></button><button type="button" role="tab" [attr.aria-selected]="activityTab() === 'log'" [class.active]="activityTab() === 'log'" (click)="setActivityTab('log')">Log <span>24</span></button></div>
       <section class="service-toolbar activity-toolbar" aria-label="Activity controls"><label class="service-search"><span aria-hidden="true">⌕</span><input type="search" [placeholder]="activityTab() === 'agents' ? 'Search agents, actions, or status...' : 'Search logs, agents, actions, or results...'" [value]="activitySearch()" (input)="setActivitySearch($event)" aria-label="Search activity by any field" /></label><label class="filter-control"><span>Filter</span><select [value]="activityFilter()" (change)="setActivityFilter($event)" aria-label="Filter activity"><option value="All">{{ activityTab() === 'agents' ? 'All statuses' : 'All actions' }}</option>@if (activityTab() === 'agents') {<option value="Running">Running</option><option value="Waiting">Waiting</option><option value="Completed">Completed</option>} @else {<option value="Tool call">Tool call</option><option value="Reasoning">Reasoning</option><option value="Message">Message</option><option value="Output">Output</option>}</select></label><span class="result-count">{{ activityResultCount() }} results</span></section>
       @if (activityTab() === 'agents') {
@@ -114,7 +186,7 @@ class SceneGraphComponent {
     </main>
     } @else {
     <main class="dashboard" id="home">
-      <header class="dashboard-heading"><div><p class="eyebrow">AGENTIC SYSTEM / OVERVIEW</p><h1>Dashboard</h1><p class="dashboard-subtitle">Monitor agents, workflows, and system health in real time.</p></div><div class="live-status"><span class="status-dot"></span> All systems operational <span class="updated-at">Updated just now</span></div></header>
+      <header class="dashboard-heading"><div><p class="eyebrow">OVERVIEW / DASHBOARD</p><h1>Dashboard</h1><p class="dashboard-subtitle">Monitor agents, workflows, and system health in real time.</p></div><div class="live-status"><span class="status-dot"></span> All systems operational <span class="updated-at">Updated just now</span></div></header>
 
       <section class="metric-grid" aria-label="System overview">
         <article class="metric-card"><div class="metric-top"><span>Active agents</span><span class="metric-icon violet">◈</span></div><strong>12 <small>/ 16</small></strong><div class="metric-foot"><span class="mini-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>+2 in the last hour</span></div></article>
@@ -164,8 +236,11 @@ class SceneGraphComponent {
     .brand { display: inline-flex; align-items: center; gap: .75rem; min-width: 12rem; color: #f5f4ff; font-size: .8rem; font-weight: 750; letter-spacing: .16em; text-decoration: none; }
     .brand-mark { display: grid; width: 1.8rem; height: 1.8rem; place-items: center; border-radius: .55rem; background: linear-gradient(145deg,#a49aff,#6655dc); color: #14121e; font-size: .95rem; letter-spacing: 0; }
     .top-links { display: flex; align-items: center; gap: 1.8rem; height: 100%; }
-    .top-link { display: grid; align-items: center; height: 100%; border-bottom: 2px solid transparent; color: #898897; font-size: .83rem; text-decoration: none; }
+    .top-link { display: grid; align-items: center; height: 100%; padding: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #898897; font: inherit; font-size: .83rem; cursor: pointer; }
     .top-link:hover,.top-link.active { color: #f5f4ff; }.top-link.active { border-bottom-color: #a49aff; }
+    .network-toolbar { justify-content: space-between; }.network-toolbar .service-search { flex: 1; max-width: 30rem; }.network-form { display: grid; gap: 1.25rem; padding: 1.25rem; }.form-field { display: grid; gap: .45rem; color: #d9d7e5; font-size: .7rem; }.form-field input,.form-field select { width: 100%; min-height: 2.55rem; padding: .65rem .8rem; border: 1px solid #ffffff16; border-radius: .6rem; outline: none; background: #171820; color: #f5f4ff; font: inherit; }.form-field input:focus,.form-field select:focus { border-color: #a49aff; }.network-step { display: grid; grid-template-columns: minmax(12rem,.8fr) minmax(0,1.5fr); gap: 1.5rem; padding-top: 1rem; border-top: 1px solid #ffffff12; }.network-step > div:first-child { display: grid; justify-items: start; align-content: start; gap: .45rem; }.network-step h2,.network-list h2 { margin: 0; color: #e8e6f3; font-size: 1rem; font-weight: 550; }.network-step p { margin: 0; color: #898797; font-size: .72rem; line-height: 1.6; }.agent-select-tools { display: grid; gap: .65rem; }.agent-select-tools .service-search { width: 100%; }.agent-picker { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; }.agent-picker label,.decision-options label { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .45rem .6rem; padding: .8rem; border: 1px solid #ffffff12; border-radius: .65rem; background: #ffffff04; color: #d9d7e5; font-size: .72rem; cursor: pointer; }.agent-picker input,.decision-options input { accent-color: #a49aff; }.agent-picker small,.decision-options small { grid-column: 2; color: #858391; font-size: .62rem; }.decision-options { display: grid; gap: .6rem; }.decision-options label { grid-template-columns: auto minmax(0,1fr); }.decision-detail { align-items: start; }.decision-detail > .form-field { max-width: 28rem; }.vote-weight-list { display: grid; gap: .5rem; }.vote-weight-list label { display: grid; grid-template-columns: minmax(0,1fr) 5rem auto; align-items: center; gap: .6rem; color: #dedde9; font-size: .72rem; }.vote-weight-list input { width: 5rem; min-height: 2.3rem; padding: .4rem; border: 1px solid #ffffff16; border-radius: .5rem; background: #171820; color: #f5f4ff; font: inherit; }.vote-weight-list small,.no-agents { color: #858391; font-size: .65rem; }.network-form-footer { display: flex; justify-content: flex-end; padding-top: .8rem; border-top: 1px solid #ffffff12; }.network-list { display: grid; gap: .65rem; }.network-list h2 { display: flex; justify-content: space-between; }.network-list h2 span { color: #858391; font-size: .7rem; font-weight: 400; }.network-row { display: flex; align-items: center; gap: .75rem; padding: .9rem 1rem; }.network-row > div { display: grid; flex: 1; gap: .2rem; }.network-row strong { color: #e5e4ef; font-size: .75rem; }.network-row small { color: #858391; font-size: .62rem; }
+    .knowledge-page { align-content: start; }.upload-zone { position: relative; display: grid; justify-items: center; gap: .55rem; min-height: 12rem; padding: 1.5rem; border: 1px dashed #a49aff55; border-radius: .9rem; background: radial-gradient(ellipse at 50% 0%,#a49aff0c,transparent 70%),#ffffff03; color: #d9d7e5; cursor: pointer; }.upload-zone:hover { border-color: #a49affaa; background-color: #a49aff08; }.upload-zone input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }.upload-zone strong { font-size: .82rem; font-weight: 550; }.upload-zone em { color: #b6adff; font-style: normal; }.upload-zone small { color: #858391; font-size: .65rem; }.upload-icon { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 1px solid #a49aff30; border-radius: .75rem; background: #a49aff12; color: #b6adff; font-size: 1.25rem; }.knowledge-list { display: grid; gap: .65rem; margin-top: .5rem; }.knowledge-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.knowledge-list-heading h2 { display: flex; align-items: center; gap: .5rem; margin: 0; color: #e8e6f3; font-size: .95rem; font-weight: 550; }.knowledge-list-heading h2 span { color: #858391; font-size: .68rem; font-weight: 400; }.knowledge-list-heading > span,.knowledge-list-heading > small { color: #777684; font-size: .62rem; }.document-row { display: flex; align-items: center; gap: .8rem; padding: .8rem 1rem; }.document-icon { display: grid; flex: 0 0 2.35rem; width: 2.35rem; height: 2.7rem; place-items: center; border: 1px solid #a49aff26; border-radius: .55rem; background: #a49aff0c; color: #b6adff; font-size: .54rem; font-weight: 700; }.document-icon.pdf-icon { border-color: #ff888f26; background: #ff888f0c; color: #ff9ba1; }.document-copy { display: grid; flex: 1; min-width: 0; gap: .24rem; }.document-copy strong,.index-document strong { overflow: hidden; color: #e5e4ef; font-size: .74rem; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }.document-copy small,.index-document small { color: #858391; font-size: .62rem; }.knowledge-empty { display: grid; justify-items: center; gap: .45rem; min-height: 10rem; align-content: center; text-align: center; }.knowledge-empty h2 { margin: 0; color: #e8e6f3; font-size: .88rem; font-weight: 550; }.knowledge-empty p { margin: 0; color: #858391; font-size: .68rem; }.source-form { display: grid; gap: 1rem; padding: 1.2rem; }.source-document-picker { display: grid; gap: .55rem; padding-top: .8rem; border-top: 1px solid #ffffff12; }.form-field-label { color: #d9d7e5; font-size: .7rem; }.source-document-picker label { display: flex; align-items: center; gap: .45rem; color: #aaa9bb; font-size: .68rem; }.source-document-picker input { accent-color: #a49aff; }.source-card { display: grid; gap: .65rem; padding: 1rem; }.source-card-top { display: flex; align-items: center; justify-content: space-between; }.source-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid #a49aff26; border-radius: .6rem; background: #a49aff0c; color: #b6adff; }.source-card h2 { margin: 0; color: #e8e6f3; font-size: .82rem; font-weight: 550; }.source-card p { margin: 0; color: #858391; font-size: .68rem; }.source-card footer,.search-result footer { display: flex; justify-content: space-between; gap: .5rem; padding-top: .65rem; border-top: 1px solid #ffffff0c; color: #858391; font-size: .6rem; }.knowledge-search-panel { display: grid; gap: 1rem; padding: 1rem; border: 1px solid #ffffff12; border-radius: .85rem; background: #171820a8; }.knowledge-search { display: flex; align-items: center; gap: .7rem; min-height: 3.2rem; padding: .35rem .4rem .35rem .9rem; border: 1px solid #ffffff18; border-radius: .65rem; background: #101116; color: #aaa9bb; }.knowledge-search > span { font-size: 1.2rem; }.knowledge-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #f5f4ff; font: inherit; font-size: .75rem; }.knowledge-search button { display: flex; align-items: center; gap: .6rem; padding: .65rem .85rem; border: 0; border-radius: .5rem; background: #9183ef; color: #171522; font: inherit; font-size: .68rem; font-weight: 600; cursor: pointer; }.search-hints { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: #777684; font-size: .6rem; }.search-hints button { padding: .35rem .55rem; border: 1px solid #ffffff12; border-radius: 999px; background: #ffffff04; color: #aaa9bb; font: inherit; cursor: pointer; }.search-hints button:hover { border-color: #a49aff55; color: #d8d3ff; }.search-results { margin-top: .5rem; }.search-result { display: grid; gap: .55rem; padding: .9rem 1rem; }.search-result-top { display: flex; align-items: center; justify-content: space-between; }.match-score { color: #8de5b7; font-size: .62rem; }.search-result h2 { margin: 0; color: #e5e4ef; font-size: .78rem; font-weight: 550; }.search-result p { margin: 0; color: #aaa9bb; font-size: .68rem; line-height: 1.65; }.index-metrics { grid-template-columns: repeat(4,minmax(0,1fr)); }.index-row { display: flex; align-items: center; gap: .85rem; padding: .85rem 1rem; }.index-document { display: grid; flex: 1; min-width: 0; gap: .35rem; }.index-document > div:first-child { display: flex; align-items: center; gap: .6rem; }.index-progress { height: .28rem; overflow: hidden; border-radius: 999px; background: #ffffff10; }.index-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#8d80ec,#75e0b0); }.index-percent { color: #c8c5d8; font-size: .7rem; font-variant-numeric: tabular-nums; }
+    .agentic-page { align-content: start; }.agent-type-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.agent-type-card { display: grid; justify-items: start; gap: .7rem; padding: 1.25rem; }.agent-type-card h2,.agentic-empty h2,.multi-agent-setup h2 { margin: 0; color: #e8e6f3; font-size: 1rem; font-weight: 550; }.agent-type-card p,.agentic-empty p,.multi-agent-setup p { margin: 0; color: #898797; font-size: .72rem; line-height: 1.6; }.agent-type-card .side-link { display: inline-flex; align-items: center; gap: .5rem; width: auto; margin-top: .3rem; }.agentic-empty { display: grid; justify-items: center; gap: .5rem; min-height: 13rem; align-content: center; text-align: center; }.empty-orbit { display: grid; width: 2.6rem; height: 2.6rem; margin-bottom: .4rem; place-items: center; border: 1px solid #a49aff35; border-radius: .8rem; background: #a49aff12; color: #b5aaff; }.agent-created-note { margin: 0; padding: .75rem 1rem; border: 1px solid #75e0b025; border-radius: .65rem; background: #75e0b00c; color: #91e6bf; font-size: .72rem; }.multi-agent-setup { display: grid; grid-template-columns: minmax(12rem,.8fr) minmax(0,1.5fr); gap: 1.5rem; padding: 1.25rem; }.multi-agent-setup > div:first-child { display: grid; justify-items: start; align-content: start; gap: .45rem; }.setup-step { color: #a49aff; font-size: .6rem; letter-spacing: .12em; }.agent-picker,.decision-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; }.agent-picker label,.decision-options label { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .45rem .6rem; padding: .8rem; border: 1px solid #ffffff12; border-radius: .65rem; background: #ffffff04; color: #d9d7e5; font-size: .72rem; cursor: pointer; }.agent-picker input,.decision-options input { accent-color: #a49aff; }.agent-picker small,.decision-options small { grid-column: 2; color: #858391; font-size: .62rem; }.decision-options { grid-template-columns: 1fr; }.decision-options label { grid-template-columns: auto minmax(0,1fr); }
     .top-action { gap: 1.5rem; margin-left: auto; text-decoration: none; }
     .side-bar { position: fixed; z-index: 4; inset: 4.25rem auto 0 0; display: flex; flex-direction: column; width: 15.5rem; padding: 1rem; border-right: 1px solid #ffffff12; background: #121319; transition: width 200ms ease; }
     .side-menu-group { flex: 0 0 auto; margin-top: 0; }
@@ -257,8 +332,9 @@ class SceneGraphComponent {
     .status-dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: #75e0b0; box-shadow: 0 0 1rem #75e0b0aa; }
     .scene-caption { right: 1.5rem; bottom: 1.5rem; color: #aaa9bb; font-size: 0.8rem; }
     .page-footer { position: absolute; right: clamp(2rem, 6vw, 6rem); bottom: 1.5rem; left: clamp(2rem, 6vw, 6rem); display: flex; justify-content: space-between; font-size: 0.6rem; }
-    .dashboard { display: grid; gap: 1.15rem; width: min(100%, 1600px); min-height: calc(100vh - 4.25rem); margin: 0 auto; padding: 1.6rem clamp(1.25rem,2.5vw,2.5rem) 1.5rem; color: #f5f4ff; }
-    .dashboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.dashboard-heading .eyebrow { margin: 0 0 .4rem; color: #9389e8; font-size: .62rem; }.dashboard-heading h1 { margin: 0; font-size: 1.65rem; font-weight: 620; letter-spacing: -.04em; line-height: 1.2; }.dashboard-subtitle { margin: .35rem 0 0; color: #8c8b9b; font-size: .78rem; }
+    .dashboard { display: grid; gap: 1.15rem; width: min(100%, 1600px); margin: 0 auto; padding: 1.6rem clamp(1.25rem,2.5vw,2.5rem) 1.5rem; color: #f5f4ff; }
+    .activity-page,.service-page { align-content: start; }
+    .dashboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.dashboard-heading > div:first-child { display: grid; grid-template-rows: .62rem 1.98rem auto; row-gap: .4rem; align-content: start; }.dashboard-heading .eyebrow { margin: 0; color: #9389e8; font-size: .62rem; line-height: .62rem; }.dashboard-heading h1 { margin: 0; font-size: 1.65rem; font-weight: 620; letter-spacing: -.04em; line-height: 1.98rem; }.dashboard-subtitle { margin: 0; color: #8c8b9b; font-size: .78rem; line-height: 1.3rem; }
     .live-status { display: flex; align-items: center; gap: .5rem; padding: .55rem .75rem; border: 1px solid #75e0b02a; border-radius: .65rem; background: #75e0b00b; color: #a8e8cb; font-size: .7rem; white-space: nowrap; }.live-status .status-dot { width: .4rem; height: .4rem; }.updated-at { margin-left: .35rem; padding-left: .65rem; border-left: 1px solid #ffffff18; color: #777684; }
     .metric-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .85rem; }.metric-card,.panel { min-width: 0; border: 1px solid #ffffff12; border-radius: .8rem; background: linear-gradient(145deg,#171820,#14151b); box-shadow: 0 .6rem 2rem #00000012; }
     .metric-card { padding: .9rem 1rem .8rem; }.metric-top { display: flex; align-items: center; justify-content: space-between; color: #a09faf; font-size: .72rem; }.metric-icon { display: grid; width: 1.65rem; height: 1.65rem; place-items: center; border-radius: .5rem; font-size: .9rem; }.metric-icon.violet { background: #a49aff18; color: #b5aaff; }.metric-icon.blue { background: #74aaff18; color: #86b5ff; }.metric-icon.amber { background: #ffc46b18; color: #ffc46b; }.metric-icon.green { background: #75e0b018; color: #75e0b0; }
@@ -281,6 +357,7 @@ class SceneGraphComponent {
       .side-menu-group { width: 100%; margin-top: 0; margin-bottom: 1.25rem; }.side-nav { width: 100%; }.side-link { justify-content: center; padding: 0; }.nav-icon { flex-basis: 1.5rem; width: 1.5rem; }
       .side-bottom { justify-content: center; width: 100%; padding-inline: 0; }.top-bar { gap: 1.5rem; padding-inline: 1.5rem; }.brand { min-width: auto; }
       .dashboard { padding-inline: 1rem; }.monitor-grid,.lower-grid { grid-template-columns: minmax(0,1fr); }.metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .multi-agent-setup,.network-step { grid-template-columns: 1fr; }.agent-picker { grid-template-columns: 1fr; }
       .scene-panel, ngt-canvas { min-height: 480px; height: 58vh; }
       .page-footer { position: static; grid-column: 1; margin-top: 1rem; }
     }
@@ -300,6 +377,60 @@ class SceneGraphComponent {
 export class AppComponent {
   readonly page = signal<'welcome' | 'login' | 'main'>('welcome');
   readonly sidebarCollapsed = signal(false);
+  readonly topSection = signal<'overview' | 'agentic-system' | 'knowledge'>('overview');
+  readonly knowledgePage = signal<'documents' | 'sources' | 'search' | 'index-status'>('documents');
+  readonly sourceFormOpen = signal(false);
+  readonly sourceName = signal('');
+  readonly sourceDescription = signal('');
+  readonly selectedSourceDocs = signal<string[]>([]);
+  readonly uploadMessage = signal('');
+  readonly knowledgeQuery = signal('');
+  readonly searchPerformed = signal(false);
+  readonly demoSearchResults = [
+    { name: 'Employee Handbook.pdf', type: 'PDF', source: 'People & Culture', score: 94, page: 12, excerpt: 'New team members begin with an orientation session covering company values, essential tools, security practices, and introductions to their immediate team.' },
+    { name: 'Product Strategy.md', type: 'MD', source: 'Product Knowledge', score: 86, page: 3, excerpt: 'Our current product strategy focuses on making everyday work more connected, with a clear path from an initial idea to a useful outcome.' },
+    { name: 'Getting Started.docx', type: 'DOCX', source: 'People & Culture', score: 78, page: 1, excerpt: 'The onboarding checklist helps new colleagues set up their workspace, meet their manager, and find the resources they need during their first week.' },
+  ];
+  readonly documents = signal([
+    { name: 'Employee Handbook.pdf', type: 'PDF', size: '2.4 MB', source: 'People & Culture', added: 'Nov 15, 2026', status: 'Indexed', indexedChunks: 42, totalChunks: 42 },
+    { name: 'Product Strategy.md', type: 'MD', size: '18 KB', source: 'Product Knowledge', added: 'Nov 14, 2026', status: 'Indexed', indexedChunks: 18, totalChunks: 18 },
+    { name: 'Getting Started.docx', type: 'DOCX', size: '846 KB', source: 'People & Culture', added: 'Nov 16, 2026', status: 'Processing', indexedChunks: 9, totalChunks: 24 },
+  ]);
+  readonly sources = signal([
+    { name: 'People & Culture', description: 'Guides and resources for the team.', documents: ['Employee Handbook.pdf', 'Getting Started.docx'] },
+    { name: 'Product Knowledge', description: 'Strategy notes and product documentation.', documents: ['Product Strategy.md'] },
+  ]);
+  knowledgeResults() {
+    const query = this.knowledgeQuery().trim().toLowerCase();
+    if (!query) return [];
+    const terms = query.split(/\s+/).filter((term) => term.length > 2);
+    return this.demoSearchResults.map((result) => ({ ...result, relevance: terms.filter((term) => `${result.name} ${result.source} ${result.excerpt}`.toLowerCase().includes(term)).length }))
+      .filter((result) => result.relevance > 0).sort((a, b) => b.relevance - a.relevance).slice(0, 3);
+  }
+  indexedChunks() { return this.documents().reduce((sum, doc) => sum + doc.indexedChunks, 0); }
+  totalChunks() { return this.documents().reduce((sum, doc) => sum + doc.totalChunks, 0); }
+  processingDocuments() { return this.documents().filter((doc) => doc.status === 'Processing').length; }
+  readonly agenticPage = signal<'agent' | 'multi-agent'>('agent');
+  readonly agentCreated = signal(false);
+  readonly roomCreated = signal(false);
+  readonly networkFormOpen = signal(false);
+  readonly networkName = signal('');
+  readonly networkSearch = signal('');
+  readonly agentSearch = signal('');
+  readonly agentTypeFilter = signal('All');
+  readonly selectedAgents = signal<string[]>(['Research Agent']);
+  readonly decisionSystem = signal<'Coordinator' | 'Consensus' | 'Majority vote'>('Coordinator');
+  readonly coordinator = signal('Research Agent');
+  readonly consensusThreshold = signal('Majority');
+  readonly voteWeights = signal<Record<string, number>>({});
+  readonly networkMessage = signal('');
+  readonly networks = signal<{ name: string; agents: number; decision: string }[]>([]);
+  readonly availableAgents = [
+    { name: 'Research Agent', type: 'Research' },
+    { name: 'Code Assistant', type: 'Development' },
+    { name: 'Data Analyst', type: 'Analytics' },
+    { name: 'Writing Agent', type: 'Writing' },
+  ];
   readonly section = signal<'dashboard' | 'activity' | 'service-health'>('dashboard');
   readonly activityTab = signal<'agents' | 'log'>('agents');
   readonly activitySearch = signal('');
@@ -323,7 +454,75 @@ export class AppComponent {
       return matchesQuery && (status === 'All' || service.status === status);
     });
   }
+  searchResults() {
+    const query = this.knowledgeQuery().trim().toLowerCase();
+    if (!query) return [];
+    return this.knowledgeResults().map((result) => ({ ...result, score: Math.min(99, 76 + result.relevance * 7) }));
+  }
+  uploadDocuments(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    const allowed = /\.(pdf|docx|txt|md)$/i;
+    const accepted = files.filter((file) => allowed.test(file.name));
+    if (!accepted.length) { this.uploadMessage.set('Choose a PDF, DOCX, TXT, or MD file to upload.'); return; }
+    this.documents.update((docs) => [...accepted.filter((file) => !docs.some((doc) => doc.name === file.name)).map((file) => {
+      const ext = file.name.split('.').pop()?.toUpperCase() ?? 'TXT';
+      const chunks = Math.max(1, Math.ceil(file.size / 18000));
+      return { name: file.name, type: ext, size: file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`, source: 'Unassigned', added: 'Nov 16, 2026', status: 'Processing', indexedChunks: 0, totalChunks: chunks };
+    }), ...docs]);
+    this.uploadMessage.set(`${accepted.length} file${accepted.length === 1 ? '' : 's'} added to the processing queue.`);
+    input.value = '';
+  }
+  setSourceName(event: Event): void { this.sourceName.set((event.target as HTMLInputElement).value); }
+  setSourceDescription(event: Event): void { this.sourceDescription.set((event.target as HTMLInputElement).value); }
+  toggleSourceDoc(name: string): void { this.selectedSourceDocs.update((docs) => docs.includes(name) ? docs.filter((doc) => doc !== name) : [...docs, name]); }
+  createSource(): void {
+    const name = this.sourceName().trim();
+    if (!name) return;
+    this.sources.update((sources) => [{ name, description: this.sourceDescription().trim() || 'Document group', documents: this.selectedSourceDocs() }, ...sources]);
+    const selected = this.selectedSourceDocs();
+    this.documents.update((docs) => docs.map((doc) => selected.includes(doc.name) ? { ...doc, source: name } : doc));
+    this.sourceName.set(''); this.sourceDescription.set(''); this.selectedSourceDocs.set([]); this.sourceFormOpen.set(false);
+  }
+  setKnowledgeQuery(event: Event): void { this.knowledgeQuery.set((event.target as HTMLInputElement).value); }
+  searchKnowledge(): void { this.searchPerformed.set(true); }
+  useSearchExample(query: string): void { this.knowledgeQuery.set(query); this.searchPerformed.set(true); }
+  filteredAgents() {
+    const query = this.agentSearch().trim().toLowerCase();
+    const type = this.agentTypeFilter();
+    return this.availableAgents.filter((agent) => agent.name.toLowerCase().includes(query) && (type === 'All' || agent.type === type));
+  }
+  filteredNetworks() {
+    const query = this.networkSearch().trim().toLowerCase();
+    return this.networks().filter((network) => network.name.toLowerCase().includes(query));
+  }
+  setNetworkName(event: Event): void { this.networkName.set((event.target as HTMLInputElement).value); }
+  setNetworkSearch(event: Event): void { this.networkSearch.set((event.target as HTMLInputElement).value); }
+  setAgentSearch(event: Event): void { this.agentSearch.set((event.target as HTMLInputElement).value); }
+  setAgentTypeFilter(event: Event): void { this.agentTypeFilter.set((event.target as HTMLSelectElement).value); }
+  setDecisionSystem(system: 'Coordinator' | 'Consensus' | 'Majority vote'): void { this.decisionSystem.set(system); }
+  setCoordinator(event: Event): void { this.coordinator.set((event.target as HTMLSelectElement).value); }
+  setConsensusThreshold(event: Event): void { this.consensusThreshold.set((event.target as HTMLSelectElement).value); }
+  setVoteWeight(agent: string, event: Event): void {
+    const value = Math.max(1, Math.min(10, Number((event.target as HTMLInputElement).value) || 1));
+    this.voteWeights.update((weights) => ({ ...weights, [agent]: value }));
+  }
+  toggleAgent(agent: string): void {
+    this.selectedAgents.update((selected) => selected.includes(agent) ? selected.filter((item) => item !== agent) : [...selected, agent]);
+  }
+  createNetwork(): void {
+    const name = this.networkName().trim();
+    if (!name) { this.networkMessage.set('Enter a network name to continue.'); return; }
+    if (!this.selectedAgents().length) { this.networkMessage.set('Select at least one agent to continue.'); return; }
+    this.networks.update((networks) => [{ name, agents: this.selectedAgents().length, decision: this.decisionSystem() }, ...networks]);
+    this.networkMessage.set(`Network “${name}” created.`);
+    this.networkName.set('');
+    this.networkFormOpen.set(false);
+  }
   toggleSidebar(): void { this.sidebarCollapsed.update((collapsed) => !collapsed); }
+  setTopSection(section: 'overview' | 'agentic-system' | 'knowledge'): void { this.topSection.set(section); }
+  setKnowledgePage(page: 'documents' | 'sources' | 'search' | 'index-status'): void { this.knowledgePage.set(page); }
+  setAgenticPage(page: 'agent' | 'multi-agent'): void { this.agenticPage.set(page); }
   setSection(section: 'dashboard' | 'activity' | 'service-health'): void { this.section.set(section); }
   setActivityTab(tab: 'agents' | 'log'): void { this.activityTab.set(tab); this.activityFilter.set('All'); }
   setActivitySearch(event: Event): void { this.activitySearch.set((event.target as HTMLInputElement).value); }
